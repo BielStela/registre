@@ -1,2 +1,4 @@
-# registre
-Terminal time tracker
+registre
+==============================
+
+A short description of the project.

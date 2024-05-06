@@ -1,27 +1,50 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "registre"
+version = "0.1.0"
+description = "Time tracking in the terminal"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Biel Stela Ballester", email = "biel.stela@gmail.com" }
+]
+keywords = ["time tracking", "time", "reporting", "invoicing"]
+dependencies = ["click==8.1.7", "platformdirs==4.2.1", "rich==13.7.1"]
+
+[project.urls]
+Homepage = "https://github.com/bielstela/registre"
+Issues = "https://github.com/bielstela/registre"
+
+[project.optional-dependencies]
+dev = ["pre-commit", "pytest"]
+
+[project.scripts]
+registre = "registre.main:cli"
+
+
 [tool.ruff]
-line-length = 100
-extend-include = ["*.ipynb"]
+src = ["src"]
+fix = true
+show-fixes = true
 
 [tool.ruff.lint]
 select = [
-    "D1", # pydocstyle errors
-    "E", # pycodestyle errors
-    "W", # pycodestyle warnings
-    "F", # flake8
-    "C", # flake8-comprehensions
-    "B", # flake8-bugbear
-    "N", # Naming conventions
-    "I", # isort
+    "B",  # flake8-bugbear
+    "E",  # pycodestyle error
+    "F",  # pyflakes
+    "I",  # isort
+    "UP", # pyupgrade
+    "W",  # pycodestyle warning
 ]
-ignore = [
-    "D104", # Missing docstring in public package
-]
+ignore-init-module-imports = true
+pydocstyle.convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "**/{tests}/*" = [
     "D100", # Missing docstring in public module
     "D103", # Missing docstring in public function
-]
-"*.ipynb" = [
-    "B018", # Useless expression. Found in cells with something like `df.head()`, used in notebooks to display data
 ]

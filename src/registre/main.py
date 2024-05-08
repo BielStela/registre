@@ -28,12 +28,12 @@ CONFIG_PATH = (
 T_FORMAT = "%Y-%m-%d %H:%m:%S"
 
 
-def adapt_datetime_epoch(d: datetime):
+def adapt_datetime_epoch(d: datetime) -> int:
     """Adapt datetime.datetime to Unix timestamp."""
     return int(d.timestamp())
 
 
-def convert_timestamp(x: float):
+def convert_timestamp(x: float) -> datetime:
     """Convert Unix epoch timestamp to datetime.datetime object."""
     return datetime.fromtimestamp(int(x))
 

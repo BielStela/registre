@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import contextlib
+import itertools
 import sqlite3
 from collections.abc import Generator
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable, NamedTuple
 
 import click
 import platformdirs
 from rich import print
+from rich.table import Table
 
 from registre import __version__
 
@@ -109,6 +111,7 @@ def select_last(project: str | None = None) -> Record | None:
 
 @click.group()
 def cli():
+    """Time tracker CLI <3"""
     innit()
 
 
@@ -119,6 +122,9 @@ def info() -> None:
     print(f"Database path: {DB_PATH}")
     with connect() as db:
         projects = db.execute("SELECT DISTINCT project FROM reg").fetchall()
+        # COUNT always returns so ti should allways be a list
+        (count,) = db.execute("SELECT COUNT(*) FROM reg").fetchall()[0]
+    print(f"Tasks registered: {count}")
     print(f"Projects: {', '.join(sorted(p for p, in projects))}")
 
 
@@ -126,20 +132,25 @@ def info() -> None:
 @click.argument("project", type=str)
 @click.argument("task", type=str)
 def start(project: str, task: str) -> None:
-    """start a task"""
+    """Start a task for a project"""
     start = datetime.now()
-    last_for_project = select_last(project)
-    if last_for_project and last_for_project.stop is None:
+    last = select_last()
+    if last and last.stop is None:
         print(
             f"Looks like you are already working on "
-            f"[bold green]{last_for_project.project}[/bold green] "
-            f'and doing [italic]"{last_for_project.task}"[/italic]'
+            f"[bold green]{last.project}[/bold green] "
+            f'doing [italic]"{last.task}"[/italic]'
         )
+
+        if click.confirm("Do you want to stop it and start this task?", abort=True):
+            stop([], standalone_mode=False)
+
     with connect() as db:
         db.execute(
             "INSERT INTO reg (project, task, start) VALUES (?, ?, ?)",
             [project, task, start],
         )
+        print(f'Started "{task}" for project [bold yellow]{project}[/bold yellow]')
 
 
 @cli.command()
@@ -153,28 +164,78 @@ def stop() -> None:
     with connect() as db:
         now = datetime.now()
         db.execute("UPDATE reg SET stop=? WHERE id=?", [now, last.id])
-        print(
-            f'Stoped task "{last.task}" for '
-            f"[bold yellow]{last.project}[/bold yellow] at {now.strftime(T_FORMAT)}"
-        )
+
+    lasted = now - last.start
+    print(
+        f'Stoped task "{last.task}" for '
+        f"[bold yellow]{last.project}[/bold yellow] at {now.strftime(T_FORMAT)}. "
+        f"Lasted: {lasted}"
+    )
 
 
 @cli.command()
 def current() -> None:
     """Print the current task"""
     with connect(record_row_factory) as db:
-        rec = db.execute("SELECT * FROM reg WHERE stop IS NULL").fetchall()
-    if rec:
-        rec = rec[0]
+        current_task = db.execute("SELECT * FROM reg WHERE stop IS NULL").fetchall()
+
+    if current_task:
+        # current_task = current_task[0]
         print(
-            f'Working on "{rec.task}" for '
-            f"[bold yellow]{rec.project}[/bold yellow] since {rec.start}"
+            f'Working on "{current_task.task}" for '
+            f"[bold yellow]{current_task.project}[/bold yellow]"
+            f" since {current_task.start}"
         )
 
 
 @cli.command()
-def report() -> None:
-    """Make a report of the recorded activity"""
+@click.argument(
+    "mode", type=click.Choice(("day", "month", "week"), case_sensitive=False)
+)
+@click.argument("offset", type=int, default=0, required=False)
+def report(mode: str, offset: int = 0) -> None:
+    """Make a report of the recorded activity. use OFFSET for previous dates"""
+
+    if mode == "day":
+        day = datetime.now().date() - timedelta(days=offset)
+        with connect(record_row_factory) as db:
+            records = db.execute(
+                "SELECT * FROM reg WHERE date(start, 'unixepoch')=?",
+                [day.strftime("%Y-%m-%d")],
+            ).fetchall()
+
+    elif mode == "week":
+        week = datetime.now().date() - timedelta(weeks=offset)
+        start = week - timedelta(days=week.weekday())
+        end = start + timedelta(days=6)
+        with connect(record_row_factory) as db:
+            records = db.execute(
+                "SELECT * FROM reg WHERE date(start, 'unixepoch') BETWEEN ? AND ?",
+                [start, end],
+            ).fetchall()
+
+    elif mode == "month":
+        query_date = datetime.now()
+        for _ in range(offset):
+            query_date = datetime(
+                year=query_date.year, month=query_date.month, day=1
+            ).date() - timedelta(days=1)
+        with connect(record_row_factory) as db:
+            records = db.execute(
+                "SELECT * FROM reg WHERE strftime('%Y-%m', start, 'unixepoch') = ?",
+                [query_date.strftime("%Y-%m")],
+            ).fetchall()
+
+    table = Table(show_header=False)
+    table.add_column("Project", justify="right", style="cyan")
+    table.add_column("Total", justify="left", style="magenta")
+    for project, group in itertools.groupby(
+        sorted(records, key=lambda x: x.project), key=lambda x: x.project
+    ):
+        project_durations = [r.stop - r.start for r in group]
+        table.add_row(project, str(sum(project_durations, timedelta())))
+
+    print(table)
 
 
 if __name__ == "__main__":

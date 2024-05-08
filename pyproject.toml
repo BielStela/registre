@@ -24,6 +24,7 @@ dev = ["pre-commit", "pytest"]
 
 [project.scripts]
 registre = "registre.main:cli"
+t = "registre.main:cli"  # short alias
 
 
 [tool.ruff]

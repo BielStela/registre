@@ -109,6 +109,42 @@ def select_last(project: str | None = None) -> Record | None:
         return last[0]
 
 
+def select_day(offset: int) -> list[Record]:
+    day = datetime.now().date() - timedelta(days=offset)
+    with connect(record_row_factory) as db:
+        records = db.execute(
+            "SELECT * FROM reg WHERE date(start, 'unixepoch')=?",
+            [day.strftime("%Y-%m-%d")],
+        ).fetchall()
+    return records
+
+
+def select_week(offset: int) -> list[Record]:
+    week = datetime.now().date() - timedelta(weeks=offset)
+    start = week - timedelta(days=week.weekday())
+    end = start + timedelta(days=6)
+    with connect(record_row_factory) as db:
+        records = db.execute(
+            "SELECT * FROM reg WHERE date(start, 'unixepoch') BETWEEN ? AND ?",
+            [start, end],
+        ).fetchall()
+    return records
+
+
+def select_month(offset: int) -> list[Record]:
+    query_date = datetime.now()
+    for _ in range(offset):
+        query_date = datetime(
+            year=query_date.year, month=query_date.month, day=1
+        ).date() - timedelta(days=1)
+    with connect(record_row_factory) as db:
+        records = db.execute(
+            "SELECT * FROM reg WHERE strftime('%Y-%m', start, 'unixepoch') = ?",
+            [query_date.strftime("%Y-%m")],
+        ).fetchall()
+    return records
+
+
 @click.group()
 def cli():
     """Time tracker CLI <3"""
@@ -197,34 +233,11 @@ def report(mode: str, offset: int = 0) -> None:
     """Make a report of the recorded activity. use OFFSET for previous dates"""
 
     if mode == "day":
-        day = datetime.now().date() - timedelta(days=offset)
-        with connect(record_row_factory) as db:
-            records = db.execute(
-                "SELECT * FROM reg WHERE date(start, 'unixepoch')=?",
-                [day.strftime("%Y-%m-%d")],
-            ).fetchall()
-
+        records = select_day(offset)
     elif mode == "week":
-        week = datetime.now().date() - timedelta(weeks=offset)
-        start = week - timedelta(days=week.weekday())
-        end = start + timedelta(days=6)
-        with connect(record_row_factory) as db:
-            records = db.execute(
-                "SELECT * FROM reg WHERE date(start, 'unixepoch') BETWEEN ? AND ?",
-                [start, end],
-            ).fetchall()
-
+        records = select_week(offset)
     elif mode == "month":
-        query_date = datetime.now()
-        for _ in range(offset):
-            query_date = datetime(
-                year=query_date.year, month=query_date.month, day=1
-            ).date() - timedelta(days=1)
-        with connect(record_row_factory) as db:
-            records = db.execute(
-                "SELECT * FROM reg WHERE strftime('%Y-%m', start, 'unixepoch') = ?",
-                [query_date.strftime("%Y-%m")],
-            ).fetchall()
+        records = select_month(offset)
 
     table = Table(show_header=False)
     table.add_column("Project", justify="right", style="cyan")

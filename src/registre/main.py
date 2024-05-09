@@ -216,7 +216,7 @@ def current() -> None:
         current_task = db.execute("SELECT * FROM reg WHERE stop IS NULL").fetchall()
 
     if current_task:
-        # current_task = current_task[0]
+        current_task = current_task[0]
         print(
             f'Working on "{current_task.task}" for '
             f"[bold yellow]{current_task.project}[/bold yellow]"
@@ -245,9 +245,9 @@ def report(mode: str, offset: int = 0) -> None:
     for project, group in itertools.groupby(
         sorted(records, key=lambda x: x.project), key=lambda x: x.project
     ):
-        project_durations = [r.stop - r.start for r in group]
-        table.add_row(project, str(sum(project_durations, timedelta())))
-
+        project_durations = [r.stop - r.start for r in group if r.stop is not None]
+        if project_durations:
+            table.add_row(project, str(sum(project_durations, timedelta())))
     print(table)
 
 

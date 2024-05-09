@@ -210,18 +210,22 @@ def stop() -> None:
 
 
 @cli.command()
-def current() -> None:
+@click.option("--short", "-s", is_flag=True)
+def current(short: bool) -> None:
     """Print the current task"""
     with connect(record_row_factory) as db:
         current_task = db.execute("SELECT * FROM reg WHERE stop IS NULL").fetchall()
 
     if current_task:
         current_task = current_task[0]
-        print(
-            f'Working on "{current_task.task}" for '
-            f"[bold yellow]{current_task.project}[/bold yellow]"
-            f" since {current_task.start}"
-        )
+        if short:
+            print(f'"{current_task.task}" on {current_task.project}')
+        else:
+            print(
+                f'Working on "{current_task.task}" for '
+                f"[bold yellow]{current_task.project}[/bold yellow]"
+                f" since {current_task.start}"
+            )
 
 
 @cli.command()

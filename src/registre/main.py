@@ -7,6 +7,7 @@ import itertools
 import sqlite3
 from collections.abc import Generator
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Callable, NamedTuple
 
 import click
@@ -18,9 +19,11 @@ from registre import __version__
 
 APP_NAME = "registre"
 APP_AUTHOR = "biel"
+
 DB_PATH = (
     platformdirs.user_data_path(appname=APP_NAME, appauthor=APP_AUTHOR) / "registre.db"
 )
+
 CONFIG_PATH = (
     platformdirs.user_config_path(appname=APP_NAME, appauthor=APP_AUTHOR)
     / "config.yaml"
@@ -76,12 +79,12 @@ def connect(
             yield db
 
 
-def innit() -> None:
+def innit(db_path: Path) -> None:
     """Innitialize the app by crating all the files and configs"""
-    if DB_PATH.exists():
+    if db_path.exists():
         return
-    DB_PATH.parent.mkdir(exist_ok=True)
-    with connect() as db:
+    db_path.parent.mkdir(exist_ok=True)
+    with connect(db_path=db_path) as db:
         db.execute(
             "CREATE TABLE reg ("
             "   id INTEGER NOT NULL PRIMARY KEY,"
@@ -148,7 +151,7 @@ def select_month(offset: int) -> list[Record]:
 @click.group()
 def cli():
     """Time tracker CLI <3"""
-    innit()
+    innit(DB_PATH)
 
 
 @cli.command()

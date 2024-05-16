@@ -49,3 +49,7 @@ pydocstyle.convention = "google"
     "D100", # Missing docstring in public module
     "D103", # Missing docstring in public function
 ]
+
+[tool.mypy]
+
+exclude = ["tests"]

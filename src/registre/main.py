@@ -36,7 +36,7 @@ def adapt_datetime_epoch(d: datetime) -> int:
     return int(d.timestamp())
 
 
-def convert_timestamp(x: float) -> datetime:
+def convert_timestamp(x: bytes) -> datetime:
     """Convert Unix epoch timestamp to datetime.datetime object."""
     return datetime.fromtimestamp(int(x))
 
@@ -84,7 +84,7 @@ def innit(db_path: Path) -> None:
     if db_path.exists():
         return
     db_path.parent.mkdir(exist_ok=True)
-    with connect(db_path=db_path) as db:
+    with connect(db_path=db_path.as_posix()) as db:
         db.execute(
             "CREATE TABLE reg ("
             "   id INTEGER NOT NULL PRIMARY KEY,"
@@ -108,8 +108,8 @@ def select_last(project: str | None = None) -> Record | None:
             last = db.execute(
                 "SELECT * FROM reg ORDER BY start DESC LIMIT 1"
             ).fetchall()
-    if last:
-        return last[0]
+
+    return last[0] if last else None
 
 
 def select_day(offset: int) -> list[Record]:
@@ -135,7 +135,7 @@ def select_week(offset: int) -> list[Record]:
 
 
 def select_month(offset: int) -> list[Record]:
-    query_date = datetime.now()
+    query_date = datetime.now().date()
     for _ in range(offset):
         query_date = datetime(
             year=query_date.year, month=query_date.month, day=1
@@ -217,10 +217,9 @@ def stop() -> None:
 def current(short: bool) -> None:
     """Print the current task"""
     with connect(record_row_factory) as db:
-        current_task = db.execute("SELECT * FROM reg WHERE stop IS NULL").fetchall()
-
-    if current_task:
-        current_task = current_task[0]
+        query_result = db.execute("SELECT * FROM reg WHERE stop IS NULL").fetchall()
+    if query_result:
+        current_task = query_result[0]
         if short:
             print(f'"{current_task.task}" on {current_task.project}')
         else:

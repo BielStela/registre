@@ -1,12 +1,19 @@
 import datetime
 import io
+import sqlite3
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from freezegun import freeze_time
+from freezegun.api import FakeDatetime
 from rich.console import Console, RenderableType
 
-from registre.main import cli, connect, get_db_path, innit
+from registre.main import _adapt_datetime_epoch, cli, connect, get_db_path, innit
+
+# Register also the type datetime.now() will return when mocked
+# with freezegun so it also stores timestamps in the database
+sqlite3.register_adapter(FakeDatetime, _adapt_datetime_epoch)
 
 
 @pytest.fixture()
@@ -17,25 +24,6 @@ def db_path(tmp_path: Path) -> Path:
 @pytest.fixture(autouse=True)
 def set_db_path_env(monkeypatch, db_path):
     monkeypatch.setenv("REGISTRE_DB_PATH", db_path.as_posix())
-
-
-@pytest.fixture()
-def db_innit(db_path):
-    innit()
-    yield
-
-
-FAKE_TIME = datetime.datetime(2000, 1, 1, 0, 0, 0)
-
-
-@pytest.fixture
-def patch_datetime_now(monkeypatch):
-    class mydatetime(datetime.datetime):
-        @classmethod
-        def now(cls):
-            return FAKE_TIME
-
-    monkeypatch.setattr(datetime, "datetime", mydatetime)
 
 
 @pytest.fixture
@@ -57,7 +45,7 @@ def test_db_path(db_path):
 
 
 def test_db_innit(db_path):
-    innit()
+    innit(debug=False)
     assert db_path.exists
     with connect() as db:
         cur = db.execute("SELECT * FROM reg")
@@ -76,23 +64,50 @@ def test_cli_info(db_path, render_rich_text):
     assert res.exit_code == 0
 
 
-def test_cli_start(patch_datetime_now):
+@freeze_time(datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC))
+def test_cli_start():
     runner = CliRunner()
     res = runner.invoke(cli, ["start", "project1", "task1"])
     assert res.exit_code == 0
     with connect() as db:
         db_res = db.execute("SELECT * FROM reg").fetchall()
-    assert db_res == [(1, "project1", "task1", FAKE_TIME, None)]
+    assert db_res == [
+        (
+            1,
+            "project1",
+            "task1",
+            datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC),
+            None,
+        )
+    ]
 
 
-def test_cli_stop(patch_datetime_now, render_rich_text):
+def test_cli_start_another_stops_previous():
+    runner = CliRunner()
+    runner.invoke(cli, ["start", "project1", "task1"])
+    res = runner.invoke(cli, ["start", "project2", "task2"], input="y")
+    print(res.output)
+
+
+def test_cli_stop(render_rich_text):
     runner = CliRunner()
     res = runner.invoke(cli, ["stop"])
     assert res.exit_code == 0
     assert render_rich_text("Nothing to stop.") in res.output
-
-    runner.invoke(cli, ["start", "project1", "task1"])
-
-    res = runner.invoke(cli, ["stop"])
+    start_t = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
+    stop_t = datetime.datetime(2024, 1, 1, 13, 0, 0, tzinfo=datetime.UTC)
+    with freeze_time(start_t) as frozen_datetime:
+        runner.invoke(cli, ["start", "project1", "task1"])
+        frozen_datetime.move_to(stop_t)
+        res = runner.invoke(cli, ["stop"])
     assert res.exit_code == 0
-    assert 'Stoped task "task1" for project1 at' in res.output
+    assert (
+        res.output
+        == f'Stoped task "task1" for project1 at {stop_t}. Lasted: {stop_t - start_t}\n'
+    )
+
+
+def test_freeze():
+    t = datetime.datetime(2024, 1, 1, 12, 0, tzinfo=datetime.UTC)
+    with freeze_time(t):
+        assert datetime.datetime.now().timestamp() == t.timestamp()

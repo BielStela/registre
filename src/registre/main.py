@@ -24,18 +24,18 @@ APP_AUTHOR = "biel"
 T_FORMAT = "%Y-%m-%d %H:%m:%S"
 
 
-def adapt_datetime_epoch(d: datetime.datetime) -> int:
+def _adapt_datetime_epoch(d: datetime.datetime) -> int:
     """Adapt datetime.datetime to Unix timestamp."""
     return int(d.timestamp())
 
 
-def convert_timestamp(x: bytes) -> datetime.datetime:
+def _convert_timestamp(x: bytes) -> datetime.datetime:
     """Convert Unix epoch timestamp to datetime.datetime object."""
-    return datetime.datetime.fromtimestamp(int(x))
+    return datetime.datetime.fromtimestamp(int(x), tz=datetime.UTC)
 
 
-sqlite3.register_adapter(datetime.datetime, adapt_datetime_epoch)
-sqlite3.register_converter("timestamp", convert_timestamp)
+sqlite3.register_adapter(datetime.datetime, _adapt_datetime_epoch)
+sqlite3.register_converter("timestamp", _convert_timestamp)
 
 
 class Record(NamedTuple):
@@ -77,7 +77,7 @@ def connect(
             yield db
 
 
-def innit(debug: bool = False) -> None:
+def innit(*, debug: bool) -> None:
     """Innitialize the app by crating all the files and configs"""
     db_path = get_db_path()
     if db_path.exists():
@@ -115,7 +115,9 @@ def select_last(project: str | None = None) -> Record | None:
 
 
 def select_day(offset: int) -> list[Record]:
-    day = datetime.datetime.now().date() - datetime.timedelta(days=offset)
+    day = datetime.datetime.now(tz=datetime.UTC).date() - datetime.timedelta(
+        days=offset
+    )
     with connect(record_row_factory) as db:
         records = db.execute(
             "SELECT * FROM reg WHERE date(start, 'unixepoch')=?",
@@ -125,7 +127,9 @@ def select_day(offset: int) -> list[Record]:
 
 
 def select_week(offset: int) -> list[Record]:
-    week = datetime.datetime.now().date() - datetime.timedelta(weeks=offset)
+    week = datetime.datetime.now(tz=datetime.UTC).date() - datetime.timedelta(
+        weeks=offset
+    )
     start = week - datetime.timedelta(days=week.weekday())
     end = start + datetime.timedelta(days=6)
     with connect(record_row_factory) as db:
@@ -137,7 +141,7 @@ def select_week(offset: int) -> list[Record]:
 
 
 def select_month(offset: int) -> list[Record]:
-    query_date = datetime.datetime.now().date()
+    query_date = datetime.datetime.now(tz=datetime.UTC).date()
     for _ in range(offset):
         query_date = datetime.datetime(
             year=query_date.year, month=query_date.month, day=1
@@ -152,9 +156,9 @@ def select_month(offset: int) -> list[Record]:
 
 @click.group()
 @click.option("--debug/--no-debug", default=False)
-def cli(debug):
+def cli(debug: bool = False):
     """Time tracker CLI <3"""
-    innit(debug)
+    innit(debug=debug)
 
 
 @cli.command()
@@ -175,7 +179,7 @@ def info() -> None:
 @click.argument("task", type=str)
 def start(project: str, task: str) -> None:
     """Start a task for a project"""
-    start = datetime.datetime.now()
+    start = datetime.datetime.now(tz=datetime.UTC)
     last = select_last()
     if last and last.stop is None:
         print(
@@ -204,7 +208,7 @@ def stop() -> None:
         return
 
     with connect() as db:
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(tz=datetime.UTC)
         db.execute("UPDATE reg SET stop=? WHERE id=?", [now, last.id])
 
     lasted = now - last.start

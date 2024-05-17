@@ -9,9 +9,7 @@ description = "Time tracking in the terminal"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
-authors = [
-    { name = "Biel Stela Ballester", email = "biel.stela@gmail.com" }
-]
+authors = [{ name = "Biel Stela Ballester", email = "biel.stela@gmail.com" }]
 keywords = ["time tracking", "time", "reporting", "invoicing"]
 dependencies = ["click==8.1.7", "platformdirs==4.2.1", "rich==13.7.1"]
 
@@ -20,11 +18,11 @@ Homepage = "https://github.com/bielstela/registre"
 Issues = "https://github.com/bielstela/registre"
 
 [project.optional-dependencies]
-dev = ["pre-commit", "pytest"]
+dev = ["pre-commit", "pytest", "freezegun"]
 
 [project.scripts]
 registre = "registre.main:cli"
-t = "registre.main:cli"  # short alias
+t = "registre.main:cli"        # short alias
 
 
 [tool.ruff]
@@ -51,5 +49,8 @@ pydocstyle.convention = "google"
 ]
 
 [tool.mypy]
-
 exclude = ["tests"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"

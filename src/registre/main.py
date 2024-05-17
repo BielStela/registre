@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import itertools
+import os
 import sqlite3
 from collections.abc import Generator
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, NamedTuple
 
@@ -20,28 +21,20 @@ from registre import __version__
 APP_NAME = "registre"
 APP_AUTHOR = "biel"
 
-DB_PATH = (
-    platformdirs.user_data_path(appname=APP_NAME, appauthor=APP_AUTHOR) / "registre.db"
-)
-
-CONFIG_PATH = (
-    platformdirs.user_config_path(appname=APP_NAME, appauthor=APP_AUTHOR)
-    / "config.yaml"
-)
 T_FORMAT = "%Y-%m-%d %H:%m:%S"
 
 
-def adapt_datetime_epoch(d: datetime) -> int:
+def adapt_datetime_epoch(d: datetime.datetime) -> int:
     """Adapt datetime.datetime to Unix timestamp."""
     return int(d.timestamp())
 
 
-def convert_timestamp(x: bytes) -> datetime:
+def convert_timestamp(x: bytes) -> datetime.datetime:
     """Convert Unix epoch timestamp to datetime.datetime object."""
-    return datetime.fromtimestamp(int(x))
+    return datetime.datetime.fromtimestamp(int(x))
 
 
-sqlite3.register_adapter(datetime, adapt_datetime_epoch)
+sqlite3.register_adapter(datetime.datetime, adapt_datetime_epoch)
 sqlite3.register_converter("timestamp", convert_timestamp)
 
 
@@ -49,8 +42,8 @@ class Record(NamedTuple):
     id: int
     project: str
     task: str | None
-    start: datetime
-    stop: datetime | None
+    start: datetime.datetime
+    stop: datetime.datetime | None
 
 
 def record_row_factory(cursor: sqlite3.Cursor, row: tuple) -> Record:
@@ -58,19 +51,24 @@ def record_row_factory(cursor: sqlite3.Cursor, row: tuple) -> Record:
     return Record(*row)
 
 
+def get_db_path() -> Path:
+    return Path(
+        os.getenv("REGISTRE_DB_PATH")
+        or platformdirs.user_data_path(appname=APP_NAME, appauthor=APP_AUTHOR)
+        / "registre.db"
+    )
+
+
 @contextlib.contextmanager
 def connect(
     row_factory: Callable | None = None,
-    *,
-    db_path: str | None = None,
 ) -> Generator[sqlite3.Connection, None, None]:
     """Context manager to connect to the db.
 
     Copied from https://github.com/pre-commit/pre-commit/blob/main/pre_commit/store.py
     """
-    db_path = db_path or DB_PATH
     with contextlib.closing(
-        sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
+        sqlite3.connect(get_db_path(), detect_types=sqlite3.PARSE_DECLTYPES)
     ) as db:
         if row_factory:
             db.row_factory = row_factory
@@ -79,12 +77,13 @@ def connect(
             yield db
 
 
-def innit(db_path: Path) -> None:
+def innit() -> None:
     """Innitialize the app by crating all the files and configs"""
+    db_path = get_db_path()
     if db_path.exists():
         return
     db_path.parent.mkdir(exist_ok=True)
-    with connect(db_path=db_path.as_posix()) as db:
+    with connect() as db:
         db.execute(
             "CREATE TABLE reg ("
             "   id INTEGER NOT NULL PRIMARY KEY,"
@@ -94,7 +93,7 @@ def innit(db_path: Path) -> None:
             "   stop TIMESTAMP"
             ")"
         )
-    print(f"Created sqlite database at: {DB_PATH}\n")
+    print(f"Created sqlite database at: {db_path}\n")
 
 
 def select_last(project: str | None = None) -> Record | None:
@@ -113,7 +112,7 @@ def select_last(project: str | None = None) -> Record | None:
 
 
 def select_day(offset: int) -> list[Record]:
-    day = datetime.now().date() - timedelta(days=offset)
+    day = datetime.datetime.now().date() - datetime.timedelta(days=offset)
     with connect(record_row_factory) as db:
         records = db.execute(
             "SELECT * FROM reg WHERE date(start, 'unixepoch')=?",
@@ -123,9 +122,9 @@ def select_day(offset: int) -> list[Record]:
 
 
 def select_week(offset: int) -> list[Record]:
-    week = datetime.now().date() - timedelta(weeks=offset)
-    start = week - timedelta(days=week.weekday())
-    end = start + timedelta(days=6)
+    week = datetime.datetime.now().date() - datetime.timedelta(weeks=offset)
+    start = week - datetime.timedelta(days=week.weekday())
+    end = start + datetime.timedelta(days=6)
     with connect(record_row_factory) as db:
         records = db.execute(
             "SELECT * FROM reg WHERE date(start, 'unixepoch') BETWEEN ? AND ?",
@@ -135,11 +134,11 @@ def select_week(offset: int) -> list[Record]:
 
 
 def select_month(offset: int) -> list[Record]:
-    query_date = datetime.now().date()
+    query_date = datetime.datetime.now().date()
     for _ in range(offset):
-        query_date = datetime(
+        query_date = datetime.datetime(
             year=query_date.year, month=query_date.month, day=1
-        ).date() - timedelta(days=1)
+        ).date() - datetime.timedelta(days=1)
     with connect(record_row_factory) as db:
         records = db.execute(
             "SELECT * FROM reg WHERE strftime('%Y-%m', start, 'unixepoch') = ?",
@@ -151,14 +150,14 @@ def select_month(offset: int) -> list[Record]:
 @click.group()
 def cli():
     """Time tracker CLI <3"""
-    innit(DB_PATH)
+    innit()
 
 
 @cli.command()
 def info() -> None:
     """Print basic program information and configurations"""
     print(f"Version: {__version__}")
-    print(f"Database path: {DB_PATH}")
+    print(f"Database path: {get_db_path()}")
     with connect() as db:
         projects = db.execute("SELECT DISTINCT project FROM reg").fetchall()
         # COUNT always returns so ti should allways be a list
@@ -172,7 +171,7 @@ def info() -> None:
 @click.argument("task", type=str)
 def start(project: str, task: str) -> None:
     """Start a task for a project"""
-    start = datetime.now()
+    start = datetime.datetime.now()
     last = select_last()
     if last and last.stop is None:
         print(
@@ -201,7 +200,7 @@ def stop() -> None:
         return
 
     with connect() as db:
-        now = datetime.now()
+        now = datetime.datetime.now()
         db.execute("UPDATE reg SET stop=? WHERE id=?", [now, last.id])
 
     lasted = now - last.start
@@ -253,7 +252,7 @@ def report(mode: str, offset: int = 0) -> None:
     ):
         project_durations = [r.stop - r.start for r in group if r.stop is not None]
         if project_durations:
-            table.add_row(project, str(sum(project_durations, timedelta())))
+            table.add_row(project, str(sum(project_durations, datetime.timedelta())))
     print(table)
 
 

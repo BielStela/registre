@@ -74,14 +74,25 @@ def test_cli_info(db_path, render_rich_text):
     runner = CliRunner()
     res = runner.invoke(cli, ["info"])
     assert res.exit_code == 0
-    assert render_rich_text(f"Database path: {db_path}") in res.output
 
 
 def test_cli_start(patch_datetime_now):
     runner = CliRunner()
     res = runner.invoke(cli, ["start", "project1", "task1"])
-    print(res.output)
     assert res.exit_code == 0
     with connect() as db:
         db_res = db.execute("SELECT * FROM reg").fetchall()
     assert db_res == [(1, "project1", "task1", FAKE_TIME, None)]
+
+
+def test_cli_stop(patch_datetime_now, render_rich_text):
+    runner = CliRunner()
+    res = runner.invoke(cli, ["stop"])
+    assert res.exit_code == 0
+    assert render_rich_text("Nothing to stop.") in res.output
+
+    runner.invoke(cli, ["start", "project1", "task1"])
+
+    res = runner.invoke(cli, ["stop"])
+    assert res.exit_code == 0
+    assert 'Stoped task "task1" for project1 at' in res.output

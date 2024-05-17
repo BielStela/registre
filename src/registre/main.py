@@ -77,10 +77,12 @@ def connect(
             yield db
 
 
-def innit() -> None:
+def innit(debug: bool = False) -> None:
     """Innitialize the app by crating all the files and configs"""
     db_path = get_db_path()
     if db_path.exists():
+        if debug:
+            print(f'Using existing db "{db_path}"')
         return
     db_path.parent.mkdir(exist_ok=True)
     with connect() as db:
@@ -93,7 +95,8 @@ def innit() -> None:
             "   stop TIMESTAMP"
             ")"
         )
-    print(f"Created sqlite database at: {db_path}\n")
+    if debug:
+        print(f'Created sqlite database at: "{db_path}"\n')
 
 
 def select_last(project: str | None = None) -> Record | None:
@@ -148,9 +151,10 @@ def select_month(offset: int) -> list[Record]:
 
 
 @click.group()
-def cli():
+@click.option("--debug/--no-debug", default=False)
+def cli(debug):
     """Time tracker CLI <3"""
-    innit()
+    innit(debug)
 
 
 @cli.command()

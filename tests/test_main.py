@@ -6,13 +6,7 @@ import pytest
 from click.testing import CliRunner
 from rich.console import Console, RenderableType
 
-from registre.main import (
-    T_FORMAT,
-    cli,
-    connect,
-    get_db_path,
-    innit,
-)
+from registre.main import T_FORMAT, cli, connect, get_db_path, innit, record_row_factory
 
 
 @pytest.fixture()
@@ -74,11 +68,18 @@ def test_cli_start(time_machine):
     assert db_res == [(1, "project1", "task1", start_t, None)]
 
 
-def test_cli_start_another_stops_previous():
+def test_cli_start_another_stops_previous(time_machine):
     runner = CliRunner()
     runner.invoke(cli, ["start", "project1", "task1"])
+    stop_t = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
+    time_machine.move_to(stop_t, tick=False)
     res = runner.invoke(cli, ["start", "project2", "task2"], input="y")
     print(res.output)
+    with connect(record_row_factory) as db:
+        records = db.execute("SELECT * FROM reg").fetchall()
+    assert len(records) == 2
+    assert records[0].stop == stop_t
+    assert records[1].start == stop_t
 
 
 def test_cli_stop(render_rich_text, time_machine):
@@ -93,10 +94,10 @@ def test_cli_stop(render_rich_text, time_machine):
     # Possibly a problem for future me if I use this with a weird ass configured
     # computer.
     start_t = datetime.datetime(2024, 1, 1, 12, 0, 0).astimezone()
-    time_machine.move_to(start_t)
+    time_machine.move_to(start_t, tick=False)
     runner.invoke(cli, ["start", "project1", "task1"])
     stop_t = datetime.datetime(2024, 1, 1, 13, 0, 0).astimezone()
-    time_machine.move_to(stop_t)
+    time_machine.move_to(stop_t, tick=False)
     res = runner.invoke(cli, ["stop"])
     assert res.exit_code == 0
     assert (

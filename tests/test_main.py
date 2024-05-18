@@ -1,19 +1,18 @@
 import datetime
 import io
-import sqlite3
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-from freezegun import freeze_time
-from freezegun.api import FakeDatetime
 from rich.console import Console, RenderableType
 
-from registre.main import _adapt_datetime_epoch, cli, connect, get_db_path, innit
-
-# Register also the type datetime.now() will return when mocked
-# with freezegun so it also stores timestamps in the database
-sqlite3.register_adapter(FakeDatetime, _adapt_datetime_epoch)
+from registre.main import (
+    T_FORMAT,
+    cli,
+    connect,
+    get_db_path,
+    innit,
+)
 
 
 @pytest.fixture()
@@ -64,22 +63,15 @@ def test_cli_info(db_path, render_rich_text):
     assert res.exit_code == 0
 
 
-@freeze_time(datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC))
-def test_cli_start():
+def test_cli_start(time_machine):
+    start_t = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
+    time_machine.move_to(start_t)
     runner = CliRunner()
     res = runner.invoke(cli, ["start", "project1", "task1"])
     assert res.exit_code == 0
     with connect() as db:
         db_res = db.execute("SELECT * FROM reg").fetchall()
-    assert db_res == [
-        (
-            1,
-            "project1",
-            "task1",
-            datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC),
-            None,
-        )
-    ]
+    assert db_res == [(1, "project1", "task1", start_t, None)]
 
 
 def test_cli_start_another_stops_previous():
@@ -89,25 +81,26 @@ def test_cli_start_another_stops_previous():
     print(res.output)
 
 
-def test_cli_stop(render_rich_text):
+def test_cli_stop(render_rich_text, time_machine):
     runner = CliRunner()
     res = runner.invoke(cli, ["stop"])
     assert res.exit_code == 0
     assert render_rich_text("Nothing to stop.") in res.output
-    start_t = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
-    stop_t = datetime.datetime(2024, 1, 1, 13, 0, 0, tzinfo=datetime.UTC)
-    with freeze_time(start_t) as frozen_datetime:
-        runner.invoke(cli, ["start", "project1", "task1"])
-        frozen_datetime.move_to(stop_t)
-        res = runner.invoke(cli, ["stop"])
+    # time_machine does not mock `astimezone()` with the
+    # passed timezone so result can be inconsistent
+    # if not mocking with a local timezone since the program is using local timezone
+    # to render times.
+    # Possibly a problem for future me if I use this with a weird ass configured
+    # computer.
+    start_t = datetime.datetime(2024, 1, 1, 12, 0, 0).astimezone()
+    time_machine.move_to(start_t)
+    runner.invoke(cli, ["start", "project1", "task1"])
+    stop_t = datetime.datetime(2024, 1, 1, 13, 0, 0).astimezone()
+    time_machine.move_to(stop_t)
+    res = runner.invoke(cli, ["stop"])
     assert res.exit_code == 0
     assert (
         res.output
-        == f'Stoped task "task1" for project1 at {stop_t}. Lasted: {stop_t - start_t}\n'
+        == f'Stoped task "task1" for project1 at {stop_t.strftime(T_FORMAT)}.'
+        f" Lasted: {stop_t - start_t}\n"
     )
-
-
-def test_freeze():
-    t = datetime.datetime(2024, 1, 1, 12, 0, tzinfo=datetime.UTC)
-    with freeze_time(t):
-        assert datetime.datetime.now().timestamp() == t.timestamp()

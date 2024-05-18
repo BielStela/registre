@@ -21,17 +21,17 @@ from registre import __version__
 APP_NAME = "registre"
 APP_AUTHOR = "biel"
 
-T_FORMAT = "%Y-%m-%d %H:%m:%S"
+T_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
-def _adapt_datetime_epoch(d: datetime.datetime) -> int:
+def _adapt_datetime_epoch(d: datetime.datetime) -> float:
     """Adapt datetime.datetime to Unix timestamp."""
-    return int(d.timestamp())
+    return float(d.timestamp())
 
 
 def _convert_timestamp(x: bytes) -> datetime.datetime:
     """Convert Unix epoch timestamp to datetime.datetime object."""
-    return datetime.datetime.fromtimestamp(int(x), tz=datetime.UTC)
+    return datetime.datetime.fromtimestamp(float(x), tz=datetime.UTC)
 
 
 sqlite3.register_adapter(datetime.datetime, _adapt_datetime_epoch)
@@ -212,9 +212,10 @@ def stop() -> None:
         db.execute("UPDATE reg SET stop=? WHERE id=?", [now, last.id])
 
     lasted = now - last.start
+    rendered_t = now.astimezone().strftime(T_FORMAT)
     print(
         f'Stoped task "{last.task}" for '
-        f"[bold yellow]{last.project}[/bold yellow] at {now.strftime(T_FORMAT)}. "
+        f"[bold yellow]{last.project}[/bold yellow] at {rendered_t}. "
         f"Lasted: {lasted}"
     )
 
@@ -233,7 +234,7 @@ def current(short: bool) -> None:
             print(
                 f'Working on "{current_task.task}" for '
                 f"[bold yellow]{current_task.project}[/bold yellow]"
-                f" since {current_task.start}"
+                f" since {current_task.start.astimezone().strftime(T_FORMAT)}"
             )
 
 
@@ -251,6 +252,8 @@ def report(mode: str, offset: int = 0) -> None:
         records = select_week(offset)
     elif mode == "month":
         records = select_month(offset)
+    else:
+        raise ValueError(f'mode "{mode}" not one of day/week/month')
 
     table = Table(show_header=False)
     table.add_column("Project", justify="right", style="cyan")

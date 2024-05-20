@@ -18,7 +18,7 @@ Homepage = "https://github.com/bielstela/registre"
 Issues = "https://github.com/bielstela/registre"
 
 [project.optional-dependencies]
-dev = ["pre-commit", "pytest", "time-machine"]
+dev = ["pre-commit", "pytest", "pytest-cov", "time-machine"]
 
 [project.scripts]
 registre = "registre.main:cli"

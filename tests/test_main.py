@@ -9,11 +9,11 @@ from rich.console import Console, RenderableType
 from registre.main import (
     T_FORMAT,
     Record,
+    _record_row_factory,
     cli,
     connect,
     get_db_path,
     innit,
-    record_row_factory,
     select_last,
 )
 
@@ -84,7 +84,7 @@ def test_cli_start_another_stops_previous(time_machine):
     time_machine.move_to(stop_t, tick=False)
     res = runner.invoke(cli, ["start", "project2", "task2"], input="y")
     print(res.output)
-    with connect(record_row_factory) as db:
+    with connect(_record_row_factory) as db:
         records = db.execute("SELECT * FROM reg").fetchall()
     assert len(records) == 2
     assert records[0].stop == stop_t

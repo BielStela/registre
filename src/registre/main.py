@@ -5,8 +5,10 @@ from __future__ import annotations
 import contextlib
 import datetime
 import itertools
+import json
 import os
 import sqlite3
+import sys
 from collections.abc import Generator
 from pathlib import Path
 from typing import Callable, NamedTuple
@@ -46,7 +48,7 @@ class Record(NamedTuple):
     stop: datetime.datetime | None
 
 
-def record_row_factory(cursor: sqlite3.Cursor, row: tuple) -> Record:
+def _record_row_factory(cursor: sqlite3.Cursor, row: tuple) -> Record:
     """Row factory for sqlite connection"""
     return Record(*row)
 
@@ -78,7 +80,7 @@ def connect(
 
 
 def innit(*, debug: bool) -> None:
-    """Innitialize the app by crating all the files and configs"""
+    """Initialize the app by crating all the files and configs"""
     db_path = get_db_path()
     if db_path.exists():
         if debug:
@@ -100,11 +102,11 @@ def innit(*, debug: bool) -> None:
 
 
 def select_last(project: str | None = None) -> Record | None:
-    with connect(record_row_factory) as db:
+    with connect(_record_row_factory) as db:
         if project:
             last = db.execute(
                 "SELECT * FROM reg WHERE project=? ORDER BY start DESC LIMIT 1",
-                [project],
+                (project,),
             ).fetchall()
         else:
             last = db.execute(
@@ -118,10 +120,10 @@ def select_day(offset: int) -> list[Record]:
     day = datetime.datetime.now(tz=datetime.UTC).date() - datetime.timedelta(
         days=offset
     )
-    with connect(record_row_factory) as db:
+    with connect(_record_row_factory) as db:
         records = db.execute(
             "SELECT * FROM reg WHERE date(start, 'unixepoch')=?",
-            [day.strftime("%Y-%m-%d")],
+            (day.strftime("%Y-%m-%d"),),
         ).fetchall()
     return records
 
@@ -132,10 +134,10 @@ def select_week(offset: int) -> list[Record]:
     )
     start = week - datetime.timedelta(days=week.weekday())
     end = start + datetime.timedelta(days=6)
-    with connect(record_row_factory) as db:
+    with connect(_record_row_factory) as db:
         records = db.execute(
             "SELECT * FROM reg WHERE date(start, 'unixepoch') BETWEEN ? AND ?",
-            [start, end],
+            (start, end),
         ).fetchall()
     return records
 
@@ -146,17 +148,17 @@ def select_month(offset: int) -> list[Record]:
         query_date = datetime.datetime(
             year=query_date.year, month=query_date.month, day=1
         ).date() - datetime.timedelta(days=1)
-    with connect(record_row_factory) as db:
+    with connect(_record_row_factory) as db:
         records = db.execute(
             "SELECT * FROM reg WHERE strftime('%Y-%m', start, 'unixepoch') = ?",
-            [query_date.strftime("%Y-%m")],
+            (query_date.strftime("%Y-%m"),),
         ).fetchall()
     return records
 
 
 @click.group()
 @click.option("--debug/--no-debug", default=False)
-def cli(debug: bool = False):
+def cli(debug: bool = False) -> None:
     """Time tracker CLI <3"""
     innit(debug=debug)
 
@@ -224,7 +226,7 @@ def stop() -> None:
 @click.option("--short", "-s", is_flag=True)
 def current(short: bool) -> None:
     """Print the current task"""
-    with connect(record_row_factory) as db:
+    with connect(_record_row_factory) as db:
         query_result = db.execute("SELECT * FROM reg WHERE stop IS NULL").fetchall()
     if query_result:
         current_task = query_result[0]
@@ -265,6 +267,36 @@ def report(mode: str, offset: int = 0) -> None:
         if project_durations:
             table.add_row(project, str(sum(project_durations, datetime.timedelta())))
     print(table)
+
+
+@cli.command()
+@click.option("--outfile", "-o", type=click.File("w"), default=sys.stdout)
+@click.option("--from", "from_", type=click.DateTime())
+@click.option("--to", type=click.DateTime())
+def export(
+    outfile: click.File, from_: datetime.datetime | None, to: datetime.datetime | None
+) -> None:
+    "Export records as json"
+    with connect(_record_row_factory) as db:
+        breakpoint()
+        if from_ is None and to is None:
+            query = db.execute("SELECT * FROM reg")
+        elif from_ is not None and to is None:
+            query = db.execute("SELECT * FROM reg WHERE start>?", (from_,))
+        elif from_ is None and to is not None:
+            query = db.execute("SELECT * FROM reg WHERE end<=?", (to,))
+        else:
+            query = db.execute("SELECT * FROM reg WHERE start>=? and end<=?", (from_,))
+
+        records = query.fetchall()
+    json.dump([record._asdict() for record in records], outfile, default=str, indent=2)  # type: ignore
+
+
+@cli.command()
+@click.argument("file", type=click.File("r"), default=sys.stdin)
+def import_(file: click.File) -> None:
+    """Import an exported json."""
+    pass
 
 
 if __name__ == "__main__":

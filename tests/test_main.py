@@ -6,7 +6,16 @@ import pytest
 from click.testing import CliRunner
 from rich.console import Console, RenderableType
 
-from registre.main import T_FORMAT, cli, connect, get_db_path, innit, record_row_factory
+from registre.main import (
+    T_FORMAT,
+    Record,
+    cli,
+    connect,
+    get_db_path,
+    innit,
+    record_row_factory,
+    select_last,
+)
 
 
 @pytest.fixture()
@@ -105,3 +114,41 @@ def test_cli_stop(render_rich_text, time_machine):
         == f'Stoped task "task1" for project1 at {stop_t.strftime(T_FORMAT)}.'
         f" Lasted: {stop_t - start_t}\n"
     )
+
+
+def test_select_last():
+    innit(debug=False)
+    records = [
+        Record(
+            id=1,
+            project="p1",
+            task="t1",
+            start=datetime.datetime(2024, 1, 1, 12),
+            stop=datetime.datetime(2024, 1, 1, 13),
+        ),
+        Record(
+            id=2,
+            project="p1",
+            task="t2",
+            start=datetime.datetime(2024, 1, 1, 13),
+            stop=datetime.datetime(2024, 1, 1, 14),
+        ),
+        Record(
+            id=3,
+            project="p2",
+            task="t2",
+            start=datetime.datetime(2024, 1, 1, 15),
+            stop=datetime.datetime(2024, 1, 1, 16),
+        ),
+    ]
+    with connect() as db:
+        for record in records:
+            db.execute("INSERT INTO reg VALUES(?,?,?,?,?)", record)
+
+    last_for_project = select_last(project="p1")
+    assert last_for_project is not None
+    assert last_for_project.id == 2
+
+    last_absolute = select_last()
+    assert last_absolute is not None
+    assert last_absolute.id == 3

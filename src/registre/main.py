@@ -10,6 +10,7 @@ import os
 import sqlite3
 import sys
 from collections.abc import Generator
+from datetime import timezone
 from pathlib import Path
 from typing import Callable, NamedTuple
 
@@ -33,7 +34,7 @@ def _adapt_datetime_epoch(d: datetime.datetime) -> float:
 
 def _convert_timestamp(x: bytes) -> datetime.datetime:
     """Convert Unix epoch timestamp to datetime.datetime object."""
-    return datetime.datetime.fromtimestamp(float(x), tz=datetime.UTC)
+    return datetime.datetime.fromtimestamp(float(x), tz=timezone.utc)
 
 
 sqlite3.register_adapter(datetime.datetime, _adapt_datetime_epoch)
@@ -117,7 +118,7 @@ def select_last(project: str | None = None) -> Record | None:
 
 
 def select_day(offset: int) -> list[Record]:
-    day = datetime.datetime.now(tz=datetime.UTC).date() - datetime.timedelta(
+    day = datetime.datetime.now(tz=timezone.utc).date() - datetime.timedelta(
         days=offset
     )
     with connect(_record_row_factory) as db:
@@ -129,7 +130,7 @@ def select_day(offset: int) -> list[Record]:
 
 
 def select_week(offset: int) -> list[Record]:
-    week = datetime.datetime.now(tz=datetime.UTC).date() - datetime.timedelta(
+    week = datetime.datetime.now(tz=timezone.utc).date() - datetime.timedelta(
         weeks=offset
     )
     start = week - datetime.timedelta(days=week.weekday())
@@ -143,7 +144,7 @@ def select_week(offset: int) -> list[Record]:
 
 
 def select_month(offset: int) -> list[Record]:
-    query_date = datetime.datetime.now(tz=datetime.UTC).date()
+    query_date = datetime.datetime.now(tz=timezone.utc).date()
     for _ in range(offset):
         query_date = datetime.datetime(
             year=query_date.year, month=query_date.month, day=1
@@ -181,7 +182,7 @@ def info() -> None:
 @click.argument("task", type=str)
 def start(project: str, task: str) -> None:
     """Start a task for a project"""
-    start = datetime.datetime.now(tz=datetime.UTC)
+    start = datetime.datetime.now(tz=timezone.utc)
     last = select_last()
     if last and last.stop is None:
         print(
@@ -210,7 +211,7 @@ def stop() -> None:
         return
 
     with connect() as db:
-        now = datetime.datetime.now(tz=datetime.UTC)
+        now = datetime.datetime.now(tz=timezone.utc)
         db.execute("UPDATE reg SET stop=? WHERE id=?", [now, last.id])
 
     lasted = now - last.start

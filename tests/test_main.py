@@ -1,5 +1,6 @@
 import datetime
 import io
+from datetime import timezone
 from pathlib import Path
 
 import pytest
@@ -67,7 +68,7 @@ def test_cli_info(db_path, render_rich_text):
 
 
 def test_cli_start(time_machine):
-    start_t = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
+    start_t = datetime.datetime(2020, 1, 1, tzinfo=timezone.utc)
     time_machine.move_to(start_t)
     runner = CliRunner()
     res = runner.invoke(cli, ["start", "project1", "task1"])
@@ -80,7 +81,7 @@ def test_cli_start(time_machine):
 def test_cli_start_another_stops_previous(time_machine):
     runner = CliRunner()
     runner.invoke(cli, ["start", "project1", "task1"])
-    stop_t = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
+    stop_t = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     time_machine.move_to(stop_t, tick=False)
     res = runner.invoke(cli, ["start", "project2", "task2"], input="y")
     print(res.output)

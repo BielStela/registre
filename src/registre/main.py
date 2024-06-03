@@ -180,9 +180,10 @@ def info() -> None:
 @cli.command()
 @click.argument("project", type=str)
 @click.argument("task", type=str)
-def start(project: str, task: str) -> None:
+@click.option("--started_since", "-s", type=click.DateTime())
+def start(project: str, task: str, started_since: datetime.datetime | None) -> None:
     """Start a task for a project"""
-    start = datetime.datetime.now(tz=timezone.utc)
+    start = started_since or datetime.datetime.now(tz=timezone.utc)
     last = select_last()
     if last and last.stop is None:
         print(
@@ -193,7 +194,6 @@ def start(project: str, task: str) -> None:
 
         if click.confirm("Do you want to stop it and start this task?", abort=True):
             stop([], standalone_mode=False)
-
     with connect() as db:
         db.execute(
             "INSERT INTO reg (project, task, start) VALUES (?, ?, ?)",
@@ -260,13 +260,23 @@ def report(mode: str, offset: int = 0) -> None:
 
     table = Table(show_header=False)
     table.add_column("Project", justify="right", style="cyan")
-    table.add_column("Total", justify="left", style="magenta")
+    table.add_column("Time", justify="left", style="magenta")
+    table.add_column("Percent", justify="center", style="green")
+    total = datetime.timedelta()
+    rows = []
     for project, group in itertools.groupby(
         sorted(records, key=lambda x: x.project), key=lambda x: x.project
     ):
         project_durations = [r.stop - r.start for r in group if r.stop is not None]
         if project_durations:
-            table.add_row(project, str(sum(project_durations, datetime.timedelta())))
+            duration = sum(project_durations, datetime.timedelta())
+            rows.append((project, duration))
+            total += duration
+    for row in rows:
+        table.add_row(row[0], str(row[1]), str(round(row[1] / total, 2)))
+
+    table.add_section()
+    table.add_row("total: ", str(total), str(round(total / total)))
     print(table)
 
 
@@ -279,7 +289,6 @@ def export(
 ) -> None:
     "Export records as json"
     with connect(_record_row_factory) as db:
-        breakpoint()
         if from_ is None and to is None:
             query = db.execute("SELECT * FROM reg")
         elif from_ is not None and to is None:

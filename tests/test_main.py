@@ -92,6 +92,20 @@ def test_cli_start_another_stops_previous(time_machine):
     assert records[1].start == stop_t
 
 
+def test_cli_start_since():
+    start_time = datetime.datetime(2024, 5, 20, 12, 0, 0)  # in localtime
+    runner = CliRunner()
+    res = runner.invoke(
+        cli, ["start", "project1", "task1", "--started_since", start_time.isoformat()]
+    )
+    assert res.exit_code == 0, res.output
+    with connect(_record_row_factory) as db:
+        records = db.execute("SELECT * FROM reg").fetchall()
+    assert len(records) == 1
+    assert records[0].start == start_time.astimezone(timezone.utc)
+    assert records[0].stop is None
+
+
 def test_cli_stop(render_rich_text, time_machine):
     runner = CliRunner()
     res = runner.invoke(cli, ["stop"])
